@@ -43,22 +43,34 @@
           (dbi-close con)))
       (respond/ok req "ok"))))
 
+(define (result-to-json result)
+  (let ([getter (relation-accessor result)])
+    (map (^r
+      (format #f
+        "{isbn: ~s, title: ~s, image: ~s, authors: ~s, publishedDate: ~s},"
+        (getter r "isbn")
+        (getter r "title")
+        (getter r "image")
+        (getter r "authors")
+        (getter r "publishedDate")))
+    (relation-rows result))))
+
+;; GET: /api/books/{isbn}/get
 (define-http-handler #/\/api\/books\/(\d+)\/get/
   (^[req app]
     (let-params req ([isbn "p:1"])
       (let* ((con (dbi-connect "dbi:sqlite:shelf.sqlite"))
-              (result (get-by-isbn con isbn))
-              [getter (relation-accessor result)])
+              (result (get-by-isbn con isbn)))
         (unwind-protect (begin
-          (respond/ok req (map (^r
-            (format #f
-              "{isbn: ~s, title: ~s, image: ~s, authors: ~s, publishedDate: ~s}"
-              (getter r "isbn")
-              (getter r "title")
-              (getter r "image")
-              (getter r "authors")
-              (getter r "publishedDate")))
-            (relation-rows result))))
+          (respond/ok req (result-to-json result)))
           (dbi-close con))))))
+
+;; GET: /api/books
+(define-http-handler "/api/books"
+  (^[req app]
+    (let* ((con (dbi-connect "dbi:sqlite:shelf.sqlite"))
+            (result (dbi-do con "SELECT * from book;")))
+          (respond/ok req (result-to-json result))
+          (dbi-close con))))
 
 (define (main args) (start-http-server :port 6789 :error-log #t :access-log #t))
